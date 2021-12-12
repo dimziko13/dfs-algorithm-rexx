@@ -1,0 +1,196 @@
+  /* REXX*/                                                           
+  /* REXX UTILITY TO IMPLEMENT DEPTH FIRST AND BREADTH FIRST SEARCH */
+  /* METHODS.TO BE USED FOR FINDING A PATH TO A GIVEN JCL INSIDE    */
+  /* THE BATCH FLOW.                                                */
+  /* BATCH FLOW IS ORGANISED INTO 11 FILES EACH ONE OF THEM HAVING  */
+  /* A CONTINUOUS CHANK OF THE FLOW.                                */
+  /* FILES ARE TCV0027.KADI.FLOW.JR23*.                             */
+  /* EXECUTION: TSO PATH#REX D JOBNAME                              */
+  /* DIMITRIS ZIAKAS - PRAGUE MARCH 2010                            */
+  ARG METHOD PRG MODE                                                 
+  PRG=STRIP(PRG)                                                      
+  /* CHECK FOR DEBUGIND MODE OR NOT                                 */
+  IF  MODE = "R" THEN TRACE "?R"                                      
+  IF  MODE = "L" THEN TRACE "?L"                                      
+  /* INITIALISE GLOBAL VARIABLES - READ FILES                       */
+  ARRAYSTACK=''                                                       
+  CALL CHECK_FILES                                                    
+  CALL BASIC_LOOP                                                     
+  /*****************************************/                         
+  EXIT 0                                                              
+*                                                                     
+ BASIC_LOOP:                                                          
+ SAY ' '                                                              
+ SAY ' '                                                              
+ SAY ' '                                                              
+ SAY ' '                                                              
+ SELECT                                                               
+   WHEN METHOD = 'D' THEN DO                                          
+        DO WHILE LENGTH(ARRAYSTACK) > 0                               
+           VISITED=''                                                 
+           PARSE VALUE ARRAYSTACK WITH BFR ARRAYSTACK                 
+           CALL TRANSFER                                              
+           ROOT = SUBSTR(IN.1,1,8)                                    
+           PUSH(ROOT)                                                 
+           QUEUE('E')                                                 
+           PULL CURRENT_NODE                                          
+           CALL DFS_PATH                                                
+        END                                                             
+   END                                                                  
+   WHEN METHOD = 'B' THEN DO                                            
+      CALL BFS_PATH                                                     
+   END                                                                  
+ END /*SELECT*/                                                         
+ RETURN                                                                 
+ TRANSFER:                                                              
+   DROP IN.                                                             
+   /*PRODUCE THE STRING OF THE COMMAND AND EXECUTE WITH INTERPRET*/     
+   COMMAND1='DO K=1 TO '!! BFR !! '0'!!';',                             
+            !!BFR!!K!!'=STRIP('!!BFR!!K');'                             
+   COMMAND2=' IN.K='!!BFR!!'K'   !!';END;IN.0='!! BFR !! '0'            
+   COMMAND = COMMAND1 !! COMMAND2                                       
+   INTERPRET COMMAND                                                    
+ RETURN                                                                 
+ DFS_PATH:                                                              
+  DO WHILE CURRENT_NODE <> 'E'                                          
+     POSITION=GET_REC(CURRENT_NODE)                                     
+     IF POS(CURRENT_NODE,VISITED) = 0 THEN DO                           
+        CALL FIND_SUCCESORS      /* HOW MANY PRGS FOLLOW              */
+        IF CHILDREN > 0 THEN     /* IF WE HAVE SUCCESORS              */
+            CALL GET_SUCCESORS                                          
+     END                                                                
+     PULL CURRENT_NODE                                                  
+     NOT_ROOT=LENGTH(VISITED)                                           
+     IF NOT_ROOT > 9 THEN                                               
+        CALL BACKTRACK                                                  
+       IF CURRENT_NODE = PRG THEN                                       
+        SAY VISITED!!' '!! CURRENT_NODE !! ' '                          
+  END                                                                   
+ RETURN                                                                 
+*                                                                       
+ BACKTRACK:                      /* TAKE THE NEXT NODE WITH SUCCESORS */
+                                 /* TAKE OUT FROM THE PATH THE ONES   */
+                                 /* ALLREADY VISITED                  */
+    IF LENGTH(VISITED) > 7 THEN DO                                      
+       PREV=SUBSTR(VISITED,LENGTH(VISITED) - 7,8)                       
+       PREV_POS=GET_REC(PREV,IN)                                        
+    END                                                                 
+    DO WHILE POS(CURRENT_NODE,IN.PREV_POS)= 0 & LENGTH(VISITED) > 9     
+       VISITED=SUBSTR(VISITED,1,LENGTH(VISITED)-9)                      
+       IF LENGTH(VISITED) > 0 THEN DO                                   
+          PREV=SUBSTR(VISITED,LENGTH(VISITED) - 7,8)                    
+          PREV_POS=GET_REC(PREV)                                        
+       END                                                              
+    END                                                                 
+ RETURN                                                                 
+*                                                                       
+ BFS_PATH:                       /* BREADTH FIRST SEARCH */             
+     INDICATOR=SUBSTR(PRG,5,1)                                          
+     SELECT                                                             
+       WHEN INDICATOR=1   THEN CALL BFS_PRINT F_NAME1                   
+       WHEN INDICATOR=2   THEN CALL BFS_PRINT F_NAME2                   
+       WHEN INDICATOR=3   THEN CALL BFS_PRINT F_NAME3                   
+       WHEN INDICATOR=4   THEN CALL BFS_PRINT F_NAME4                   
+       WHEN INDICATOR=5   THEN CALL BFS_PRINT F_NAME5                   
+       WHEN INDICATOR=6   THEN CALL BFS_PRINT F_NAME6                   
+       WHEN INDICATOR=8   THEN CALL BFS_PRINT F_NAME8                   
+       WHEN INDICATOR='C' THEN CALL BFS_PRINT F_NAMEC                   
+       WHEN INDICATOR='E' THEN CALL BFS_PRINT F_NAMEE                   
+       WHEN INDICATOR='L' THEN CALL BFS_PRINT F_NAMEL                   
+       WHEN INDICATOR='Y' THEN CALL BFS_PRINT F_NAMEY                   
+     END                                                                
+ RETURN                                                                 
+*                                                                       
+ BFS_PRINT:                                                             
+   PARSE ARG FILE                                                       
+  "ALLOC F(XXIN) DS('"FILE"') SHR "                                     
+  "EXECIO * DISKR XXIN(FINIS STEM LIST."                                
+  "FREE F(XXIN)"                                                        
+   DO I=1 TO LIST.0                                                     
+      LIST.I=STRIP(LIST.I)                                              
+      SAY LIST.I                                                        
+   END                                                                  
+ RETURN                                                                 
+                                                                        
+ FIND_SUCCESORS:      /* CONVENTION IS THAT EVERY JOB NAME HAS 8 CHARS*/
+    STRING = STRIP(IN.POSITION)                                         
+    SUCCESORS.POSITION = STRING                                         
+    L=LENGTH(STRING)                                                    
+    CHILDREN   = L % 8 - 1                                              
+                      /* SPACES BETWEEN THE JOB NAMES INCREASE THE    */
+                      /* RESULT SO THEY HAVE TO BE SUBTRACTED         */
+    IF CHILDREN > 8 THEN                                                
+       CHILDREN = CHILDREN - CHILDREN % 8                               
+    POSITION=0                                                          
+ RETURN                                                                 
+*                                                                       
+ GET_SUCCESORS:       /*STORE SUCCESOR PROGRAMS INTO THE STACK*/        
+    J = 10                                                              
+    DO I = 1 TO CHILDREN                                                
+       PUSH(SUBSTR(STRING,J,8))                                         
+       J = J + 9                                                        
+    END                                                                 
+    VISITED = VISITED !! ' ' !! CURRENT_NODE /*MARK NODE AS VISITED */  
+ RETURN                                                                 
+*                                                                       
+ INIT_STUFF:                                                            
+   PARSE ARG F_NAME,CNT .                                               
+   ARRAY='IN'!!CNT!!'.'                                                 
+   COMMAND='"EXECIO * DISKR XXIN(FINIS STEM '!! ARRAY !!'"'             
+  "ALLOC F(XXIN) DS('"F_NAME"') SHR "                                   
+   INTERPRET COMMAND                                                    
+  "FREE F(XXIN)"                                                        
+   ARRAYSTACK=ARRAYSTACK!!ARRAY!!' '                                    
+  IF METHOD <> 'D' & METHOD <> 'B' THEN DO                              
+     SAY 'INVALIB METHOD'                                              
+     SAY 'ENTER B FOR BREADTH SEARCH OR D FOR DEPTH SEARCH'            
+     EXIT 16                                                           
+  END                                                                  
+ RETURN 0                                                              
+*                                                                      
+ GET_REC:                                                              
+   PARSE ARG NODE                                                      
+   DO K=1 TO IN.0                                                      
+      IF NODE = SUBSTR(IN.K,1,8) THEN DO                               
+         LEAVE                                                         
+      END                                                              
+   END                                                                 
+ RETURN K                                                              
+                                                                       
+ CHECK_FILES:                                                          
+  FILESTACK=''                                                         
+  F_NAME1 ='XXXXXXXX'                                   
+  FILESTACK=FILESTACK !! F_NAME1 !! ' '                                
+  F_NAME2 ='XXXXXXXX'                                   
+  FILESTACK=FILESTACK !! F_NAME2 !! ' '                                
+  F_NAME3  ='XXXXXXXX'                                  
+  FILESTACK=FILESTACK !! F_NAME3 !! ' '                                
+  F_NAME31 ='XXXXXXXX'                                 
+  FILESTACK=FILESTACK !! F_NAME31 !! ' '                               
+  F_NAME4 ='XXXXXXXX'                                   
+  FILESTACK=FILESTACK !! F_NAME4 !! ' '                                
+  F_NAME5 ='XXXXXXXX'                                   
+  FILESTACK=FILESTACK !! F_NAME5 !! ' '                                
+  F_NAME6 ='XXXXXXXX'                                   
+  FILESTACK=FILESTACK !! F_NAME6 !! ' '                                
+  F_NAME8 ='XXXXXXXX'                                   
+  FILESTACK=FILESTACK !! F_NAME8 !! ' '                                
+  F_NAMEC ='XXXXXXXX'                                   
+  FILESTACK=FILESTACK !! F_NAMEC !! ' '                                
+  F_NAMEE ='XXXXXXXX'                                   
+  FILESTACK=FILESTACK !! F_NAMEE !! ' '         
+  F_NAMEL ='XXXXXXXX'            
+  FILESTACK=FILESTACK !! F_NAMEL !! ' '         
+  F_NAMEY ='XXXXXXXX'            
+  FILESTACK=FILESTACK !! F_NAMEY !! ' '         
+  CNT=1                                         
+  DO WHILE LENGTH(FILESTACK) > 0                
+     PARSE VALUE FILESTACK WITH F_NAME FILESTACK
+     IF SYSDSN("'"F_NAME"'") <> "OK" THEN DO    
+        SAY "ERROR" F_NAME SYSDSN("'"F_NAME"'") 
+        EXIT 8                                  
+     END                                        
+     INIT=INIT_STUFF(F_NAME,CNT)                
+     CNT=CNT+1                                  
+  END                                           
+ RETURN                                         
